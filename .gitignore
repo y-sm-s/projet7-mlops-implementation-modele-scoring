@@ -1,0 +1,88 @@
+# ========================
+# Système & OS
+# ========================
+.DS_Store
+._*
+.TemporaryItems
+.Trashes
+*.tmp
+*.log
+*.swp
+*.swo
+
+# Fichiers temporaires Google Drive / iCloud
+.tmp.driveupload
+.tmp.drivedownload
+.goutputstream-*
+
+# ========================
+# Données brutes (volumineuses)
+# ========================
+# ⚠️ Les fichiers Home Credit dépassent 100 Mo → NON VERSIONNABLES sur GitHub
+data/raw/*.csv
+data/raw/*.zip
+data/raw/*.parquet
+
+# Tu peux garder les petits fichiers utiles (ex: description des colonnes)
+# → ne PAS les lister ici
+
+# ========================
+# MLflow
+# ========================
+mlruns/
+mlflow_backend/
+mlflow.db
+mlruns/**
+mlflow_backend/**
+
+# Modèles sauvegardés localement (optionnel : tu peux les versionner via MLflow UI distant)
+models/
+
+# ========================
+# Environnements Python
+# ========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+ENV/
+.env
+.conda/
+conda-env/
+
+# ========================
+# Jupyter / Notebooks
+# ========================
+
+# ⚠️ Sauf si tu veux versionner les notebooks propres → dans ce cas, supprime la ligne ci-dessus
+# Mais garde .ipynb_checkpoints/ ignoré
+
+# ========================
+# IDE / Éditeurs
+# ========================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ========================
+# Autres
+# ========================
+*.egg-info/
+dist/
+build/
+.coverage
+.pytest_cache/
+*.csv
+*.png
+src/mlflow_local_config.py
+src/notify.py
+src/tracking_local_utils.py
+mlruns/
+data/
+*.csv
+*.pkl

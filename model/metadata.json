@@ -1,0 +1,7 @@
+{
+  "optimal_threshold": 0.2950967703360949,
+  "model_type": "LightGBM",
+  "training_samples": 452264,
+  "feature_count": 776,
+  "date": "2026-02-06 14:44:55"
+}
