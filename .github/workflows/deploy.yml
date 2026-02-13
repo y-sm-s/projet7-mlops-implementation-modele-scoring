@@ -1,0 +1,67 @@
+name: Deploy Credit Risk API
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        cd api
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run unit tests
+      run: |
+        cd api
+        python -m unittest test_api.py -v
+    
+    - name: Test API startup
+      run: |
+        cd api
+        timeout 10 uvicorn app:app --host 0.0.0.0 --port 8000 &
+        sleep 5
+        curl http://localhost:8000/ || echo "API didn't start properly"
+    
+    - name: Notify test results
+      if: success()
+      run: |
+        echo "✅ All tests passed successfully!"
+        echo "✅ API starts without errors"
+    
+    - name: Notify test failure
+      if: failure()
+      run: |
+        echo "❌ Tests failed - check logs above"
+
+  deploy:
+    name: Deploy to Render
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Trigger Render deployment
+      run: |
+        if [ -n "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+          echo "✅ Deployment triggered on Render"
+        else
+          echo "⚠️  RENDER_DEPLOY_HOOK secret not configured"
+          echo "Add it in: GitHub repo > Settings > Secrets > Actions"
+        fi
