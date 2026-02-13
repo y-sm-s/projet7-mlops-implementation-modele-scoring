@@ -1,15 +1,14 @@
 import pandas as pd
 from .model_loader import load_artifacts
 
-<<<<<<< HEAD
+
 # Charger les artifacts au démarrage (une seule fois)
-=======
->>>>>>> eb03a00 (Ajout des dossiers api, model, data et streamlit_app)
+
+
 model, features, threshold = load_artifacts()
 
 
 def predict_client(data: dict):
-<<<<<<< HEAD
     """
     Prédit le risque de défaut pour un client
 
@@ -34,7 +33,6 @@ def predict_client(data: dict):
     proba = model.predict_proba(df)[0, 1]
     decision = int(proba >= threshold)
 
-=======
     # Vérifier features
     missing = set(features) - set(data.keys())
     if missing:
@@ -43,7 +41,7 @@ def predict_client(data: dict):
     df = pd.DataFrame([{f: data[f] for f in features}])
     proba = model.predict_proba(df)[0, 1]
     decision = int(proba >= threshold)
->>>>>>> eb03a00 (Ajout des dossiers api, model, data et streamlit_app)
+
     return {
         "decision": decision,
         "probability": float(proba),
