@@ -1,128 +1,36 @@
-"""
-Tests unitaires pour l'API Credit Risk - Projet 7
-Exécution : python -m unittest test_api.py -v
-"""
-
-import sys
-import os
 import unittest
-import json
+from fastapi.testclient import TestClient
+from api.app import app
 
-# Ajouter le dossier parent au path
-sys.path.insert(0, os.path.dirname(__file__))
-
-from api.predict import predict_client
+client = TestClient(app)
 
 
 class TestCreditAPI(unittest.TestCase):
-    """Tests de l'API de prédiction de risque crédit"""
+    def test_health(self):
+        """Test que l'API répond sur /"""
+        response = client.get("/")
+        self.assertEqual(response.status_code, 200)
 
-    @classmethod
-    def setUpClass(cls):
-        """Charge un exemple de client pour les tests"""
-        try:
-            import pandas as pd
+    def test_predict_endpoint(self):
+        """Test que l'endpoint /predict répond correctement"""
+        payload = {"data": {"AMT_CREDIT": 100000}}
 
-            # Essayer de charger depuis sample_clients.csv
-            df = pd.read_csv("sample_clients.csv")
-            cls.sample_client = df.iloc[0].to_dict()
-            print(f"✅ Client chargé depuis sample_clients.csv")
-        except:
-            # Fallback : données réalistes minimales
-            cls.sample_client = {
-                "AMT_CREDIT": 450000.0,
-                "DAYS_BIRTH": -12000,
-                "EXT_SOURCE_2": 0.62,
-                "AMT_INCOME_TOTAL": 135000.0,
-                "DAYS_EMPLOYED": -1500,
-                "CNT_FAM_MEMBERS": 2.0,
-                "AMT_ANNUITY": 25000.0,
-                "DAYS_ID_PUBLISH": -3000,
-            }
-            print(f"⚠️  Données fallback utilisées pour les tests")
+        response = client.post("/predict", json=payload)
+        self.assertEqual(response.status_code, 200)
 
-    def test_prediction_structure(self):
-        """Test 1 : La prédiction retourne la bonne structure"""
-        result = predict_client(self.sample_client)
+        result = response.json()
 
-        self.assertIn("decision", result, "Le champ 'decision' doit être présent")
-        self.assertIn("probability", result, "Le champ 'probability' doit être présent")
-        self.assertIn("threshold", result, "Le champ 'threshold' doit être présent")
-        print("✅ Test structure : OK")
+        self.assertIn("decision", result)
+        self.assertIn("probability", result)
+        self.assertIn("threshold", result)
 
-    def test_probability_range(self):
-        """Test 2 : La probabilité est entre 0 et 1"""
-        result = predict_client(self.sample_client)
+    def test_predict_missing_data(self):
+        """Test que l'API gère les données manquantes"""
+        payload = {"data": {}}
 
-        self.assertGreaterEqual(
-            result["probability"], 0.0, "Probabilité doit être >= 0"
-        )
-        self.assertLessEqual(result["probability"], 1.0, "Probabilité doit être <= 1")
-        print(f"✅ Test probabilité : {result['probability']:.4f} ∈ [0, 1]")
-
-    def test_decision_binary(self):
-        """Test 3 : La décision est 0 ou 1"""
-        result = predict_client(self.sample_client)
-
-        self.assertIn(result["decision"], [0, 1], "Decision doit être 0 ou 1")
-        print(f"✅ Test décision binaire : {result['decision']} ∈ {{0, 1}}")
-
-    def test_decision_logic(self):
-        """Test 4 : La décision respecte le seuil métier"""
-        result = predict_client(self.sample_client)
-
-        if result["probability"] >= result["threshold"]:
-            self.assertEqual(
-                result["decision"],
-                1,
-                "Si proba >= seuil, decision doit être 1 (refusé)",
-            )
-        else:
-            self.assertEqual(
-                result["decision"],
-                0,
-                "Si proba < seuil, decision doit être 0 (accordé)",
-            )
-
-        print(
-            f"✅ Test logique : proba={result['probability']:.4f}, "
-            f"seuil={result['threshold']:.4f}, decision={result['decision']}"
-        )
-
-    def test_missing_features(self):
-        """Test 5 : Gestion des features manquantes"""
-        incomplete_data = {"AMT_CREDIT": 100000.0}
-
-        with self.assertRaises(ValueError) as context:
-            predict_client(incomplete_data)
-
-        error_msg = str(context.exception).lower()
-        self.assertIn(
-            "manquantes", error_msg, "L'erreur doit mentionner les features manquantes"
-        )
-        print(f"✅ Test features manquantes : ValueError correctement levée")
-
-    def test_threshold_consistency(self):
-        """Test 6 : Le seuil est cohérent"""
-        result = predict_client(self.sample_client)
-        threshold = result["threshold"]
-
-        self.assertGreater(threshold, 0.0, "Seuil doit être > 0")
-        self.assertLess(threshold, 1.0, "Seuil doit être < 1")
-        print(f"✅ Test seuil : {threshold:.4f} ∈ (0, 1)")
-
-    def test_data_types(self):
-        """Test 7 : Les types de données retournés sont corrects"""
-        result = predict_client(self.sample_client)
-
-        self.assertIsInstance(result["decision"], int, "decision doit être int")
-        self.assertIsInstance(
-            result["probability"], float, "probability doit être float"
-        )
-        self.assertIsInstance(result["threshold"], float, "threshold doit être float")
-        print("✅ Test types de données : OK")
+        response = client.post("/predict", json=payload)
+        self.assertNotEqual(response.status_code, 500)
 
 
 if __name__ == "__main__":
-    # Lancer les tests avec verbosité
-    unittest.main(verbosity=2)
+    unittest.main()

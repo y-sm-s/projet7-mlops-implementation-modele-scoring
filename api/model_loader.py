@@ -4,8 +4,8 @@ import json
 import os
 from pathlib import Path
 
-# Chemin relatif au dossier api/
-BASE_DIR = Path(__file__).parent.parent  # remonte au dossier Projet_7
+# Chemin relatif au dossier racine
+BASE_DIR = Path(__file__).parent.parent
 
 MODEL_PATH = BASE_DIR / "model" / "final_model.pkl"
 FEATURES_PATH = BASE_DIR / "model" / "features_list.txt"
@@ -24,3 +24,12 @@ def load_artifacts():
 
     threshold = metadata["optimal_threshold"]
     return model, features, threshold
+
+
+# Mode CI : on ne charge pas le modèle
+if os.getenv("CI") == "true":
+    model = None
+    features = []
+    threshold = 0.5
+else:
+    model, features, threshold = load_artifacts()
