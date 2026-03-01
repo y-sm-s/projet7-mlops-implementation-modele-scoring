@@ -1,26 +1,24 @@
-# api/model_loader.py
-import joblib
-import json
-import os
 from pathlib import Path
+import joblib, json
 
-# Chemin relatif au dossier racine
-BASE_DIR = Path(__file__).parent.parent
+# Dossier api/
+BASE_DIR = Path(__file__).resolve().parent
 
-MODEL_PATH = BASE_DIR / "model" / "final_model.pkl"
-FEATURES_PATH = BASE_DIR / "model" / "features_list.txt"
-METADATA_PATH = BASE_DIR / "model" / "metadata.json"
+# On remonte d’un niveau vers la racine du repo
+ROOT_DIR = BASE_DIR.parent
+
+MODEL_PATH = ROOT_DIR / "model" / "final_model.pkl"
+FEATURES_PATH = ROOT_DIR / "model" / "features_list.txt"
+METADATA_PATH = ROOT_DIR / "model" / "metadata.json"
 
 
 def load_artifacts():
-    """Charge le modèle, la liste des features et le seuil métier."""
     model = joblib.load(MODEL_PATH)
 
-    with open(FEATURES_PATH, "r") as f:
+    with open(FEATURES_PATH) as f:
         features = [line.strip() for line in f if line.strip()]
 
-    with open(METADATA_PATH, "r") as f:
+    with open(METADATA_PATH) as f:
         metadata = json.load(f)
 
-    threshold = metadata["optimal_threshold"]
-    return model, features, threshold
+    return model, features, metadata["optimal_threshold"]
