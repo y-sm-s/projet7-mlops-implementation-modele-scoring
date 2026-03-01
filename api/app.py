@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any
-from .predict import predict_client
+from api.predict import predict_client
 
 app = FastAPI(
     title="Credit Risk API - Projet 7",
