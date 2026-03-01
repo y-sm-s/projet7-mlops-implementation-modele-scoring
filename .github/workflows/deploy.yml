@@ -46,8 +46,8 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
-    - name: Deploy with Render Action
-      uses: render-oss/action-deploy@v1
+    - name: Deploy to Render
+      uses: render-oss/deploy@v1
       with:
         service-id: ${{ secrets.RENDER_SERVICE_ID }}
         api-key: ${{ secrets.RENDER_API_KEY }}
