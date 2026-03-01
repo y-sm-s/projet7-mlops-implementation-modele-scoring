@@ -24,12 +24,3 @@ def load_artifacts():
 
     threshold = metadata["optimal_threshold"]
     return model, features, threshold
-
-
-# Mode CI : on ne charge pas le modèle
-if os.getenv("CI") == "true":
-    model = None
-    features = []
-    threshold = 0.5
-else:
-    model, features, threshold = load_artifacts()

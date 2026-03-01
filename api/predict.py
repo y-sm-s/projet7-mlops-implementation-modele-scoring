@@ -1,16 +1,25 @@
 import pandas as pd
 from .model_loader import load_artifacts
 
+# Lazy loading : le modèle n'est chargé qu'au premier appel
+model = None
+features = None
+threshold = None
 
-# Charger les artifacts au démarrage (une seule fois)
 
+def get_artifacts():
+    """Charge les artifacts une seule fois, au premier appel."""
+    global model, features, threshold
 
-model, features, threshold = load_artifacts()
+    if model is None:
+        model, features, threshold = load_artifacts()
+
+    return model, features, threshold
 
 
 def predict_client(data: dict):
     """
-    Prédit le risque de défaut pour un client
+    Prédit le risque de défaut pour un client.
 
     Args:
         data: Dictionnaire avec les features du client
@@ -21,6 +30,9 @@ def predict_client(data: dict):
     Raises:
         ValueError: Si des features sont manquantes
     """
+
+    model, features, threshold = get_artifacts()
+
     # Vérifier les features manquantes
     missing = set(features) - set(data.keys())
     if missing:
@@ -30,15 +42,6 @@ def predict_client(data: dict):
     df = pd.DataFrame([{f: data[f] for f in features}])
 
     # Prédiction
-    proba = model.predict_proba(df)[0, 1]
-    decision = int(proba >= threshold)
-
-    # Vérifier features
-    missing = set(features) - set(data.keys())
-    if missing:
-        raise ValueError(f"Features manquantes : {missing}")
-    # Créer DataFrame avec bon ordre
-    df = pd.DataFrame([{f: data[f] for f in features}])
     proba = model.predict_proba(df)[0, 1]
     decision = int(proba >= threshold)
 
