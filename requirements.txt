@@ -5,9 +5,7 @@ lightgbm==4.5.0
 pandas==2.2.3
 numpy==2.0.2
 python-multipart==0.0.9
-imbalanced-learn==0.10.1
+imbalanced-learn==0.13.0
 joblib==1.5.3
-fastapi
-uvicorn
 httpx
 pytest
