@@ -1,4 +1,4 @@
-name: Deploy Credit Risk API
+name: CI/CD - Credit Risk API
 
 on:
   push:
@@ -8,60 +8,60 @@ on:
 
 jobs:
   test:
-    name: Run Tests
+    name: Run Tests & Quality Checks
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-    
+
     - name: Set up Python 3.10
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
-    
+
     - name: Install dependencies
+      working-directory: api
       run: |
-        cd api
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-    
+        pip install black flake8 safety
+
+    - name: Lint with flake8
+      working-directory: api
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+
+    - name: Format check with Black
+      working-directory: api
+      run: black --check .
+
+    - name: Security check with Safety
+      working-directory: api
+      run: safety check || true
+
     - name: Run unit tests
-      run: |
-        cd api
-        python -m unittest test_api.py -v
-    
+      working-directory: api
+      run: python -m unittest test_api.py -v
+
     - name: Test API startup
+      working-directory: api
       run: |
-        cd api
         timeout 10 uvicorn app:app --host 0.0.0.0 --port 8000 &
         sleep 5
-        curl http://localhost:8000/ || echo "API didn't start properly"
-    
-    - name: Notify test results
-      if: success()
-      run: |
-        echo "✅ All tests passed successfully!"
-        echo "✅ API starts without errors"
-    
-    - name: Notify test failure
-      if: failure()
-      run: |
-        echo "❌ Tests failed - check logs above"
+        curl -f http://localhost:8000/ || (echo "API failed to start" && exit 1)
 
   deploy:
     name: Deploy to Render
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
+
     steps:
-    - name: Trigger Render deployment
-      run: |
-        if [ -n "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
-          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
-          echo "✅ Deployment triggered on Render"
-        else
-          echo "⚠️  RENDER_DEPLOY_HOOK secret not configured"
-          echo "Add it in: GitHub repo > Settings > Secrets > Actions"
-        fi
+    - name: Deploy with Render Action
+      uses: render-oss/action-deploy@v1
+      with:
+        service-id: ${{ secrets.RENDER_SERVICE_ID }}
+        api-key: ${{ secrets.RENDER_API_KEY }}
+        wait-for-deploy: true
