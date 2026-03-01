@@ -29,3 +29,8 @@ def predict_client(data: dict):
         "probability": float(proba),
         "threshold": float(threshold),
     }
+
+
+print("DEBUG model:", model)
+print("DEBUG features:", features)
+print("DEBUG threshold:", threshold)
