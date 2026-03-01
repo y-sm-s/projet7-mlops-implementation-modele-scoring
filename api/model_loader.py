@@ -26,4 +26,3 @@ def load_artifacts():
     return model, features, metadata["optimal_threshold"]
 
 
-print("MODEL_PATH:", MODEL_PATH)

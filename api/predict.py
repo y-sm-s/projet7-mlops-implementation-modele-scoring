@@ -31,6 +31,3 @@ def predict_client(data: dict):
     }
 
 
-print("DEBUG model:", model)
-print("DEBUG features:", features)
-print("DEBUG threshold:", threshold)
