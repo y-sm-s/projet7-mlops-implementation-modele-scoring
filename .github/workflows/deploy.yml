@@ -33,9 +33,9 @@ jobs:
       run: python -m pytest tests/ -v
 
     - name: Test API startup
-      working-directory: api
+      working-directory: .
       run: |
-        timeout 10 uvicorn app:app --host 0.0.0.0 --port 8000 &
+        timeout 10 uvicorn api.app:app --host 0.0.0.0 --port 8000 &
         sleep 5
         curl -f http://localhost:8000/ || (echo "API failed to start" && exit 1)
 
