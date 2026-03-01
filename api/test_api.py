@@ -11,7 +11,7 @@ import json
 # Ajouter le dossier parent au path
 sys.path.insert(0, os.path.dirname(__file__))
 
-from .predict import predict_client
+from api.predict import predict_client
 
 
 class TestCreditAPI(unittest.TestCase):

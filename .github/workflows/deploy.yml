@@ -27,8 +27,8 @@ jobs:
         pip install -r requirements.txt
 
     - name: Run unit tests
-      working-directory: api
-      run: python -m unittest test_api.py -v
+      working-directory:  . 
+      run: python -m unittest discover -s api -p "test_*.py" -v
 
     - name: Test API startup
       working-directory: api
