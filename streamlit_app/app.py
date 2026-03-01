@@ -2,9 +2,11 @@ import streamlit as st
 import pandas as pd
 import requests
 import plotly.graph_objects as go
+import os
+from pathlib import Path
 
 # 🔧 CONFIGURATION — À MODIFIER AVEC TA VRAIE URL
-API_URL = "https://projet7-credit-risk.onrender.com/predict"  # ← Remplace par ta vraie URL Render
+API_URL = "https://projet7-mlops-implementation-modele.onrender.com/predict"
 
 # 🎨 Style global
 st.set_page_config(
@@ -25,15 +27,48 @@ st.markdown(
 )
 
 
-# 📂 Charger les exemples de clients
+# 📂 Charger les exemples de clients - CORRECTION ICI
 @st.cache_data
 def load_sample_clients():
-    df = pd.read_csv("sample_clients.csv")
-    return df
+    """
+    Charge sample_clients.csv en cherchant dans plusieurs emplacements possibles
+    """
+    # Liste des emplacements possibles
+    possible_paths = [
+        "sample_clients.csv",  # Même dossier que le script
+        "./sample_clients.csv",  # Explicite même dossier
+        "../sample_clients.csv",  # Dossier parent
+        "streamlit_app/sample_clients.csv",  # Si lancé depuis racine
+        str(Path(__file__).parent / "sample_clients.csv"),  # Dossier du script
+    ]
+
+    # Essayer chaque chemin
+    for path in possible_paths:
+        if os.path.exists(path):
+            st.success(f"✅ Fichier trouvé : {path}")
+            return pd.read_csv(path)
+
+    # Si aucun chemin ne fonctionne
+    st.error(f"❌ sample_clients.csv introuvable dans les emplacements suivants :")
+    for path in possible_paths:
+        st.write(f"  - {os.path.abspath(path)}")
+
+    st.info("📁 Répertoire de travail actuel : " + os.getcwd())
+    st.info("📄 Fichiers dans le dossier actuel : " + str(os.listdir(".")))
+
+    # Retourner un DataFrame vide pour éviter le crash
+    return pd.DataFrame()
 
 
 try:
     df_clients = load_sample_clients()
+
+    if df_clients.empty:
+        st.warning(
+            "⚠️ Aucun client exemple disponible. Veuillez placer sample_clients.csv dans le bon dossier."
+        )
+        st.stop()
+
     client_names = [f"Client {i + 1}" for i in range(len(df_clients))]
 
     # 📋 Menu déroulant
@@ -113,14 +148,20 @@ try:
 
             except requests.exceptions.Timeout:
                 st.error(
-                    "⏰ Délai d’attente dépassé. L’API est peut-être en train de démarrer (Render). Réessayez dans 30 secondes."
+                    "⏰ Délai d'attente dépassé. L'API est peut-être en train de démarrer (Render). Réessayez dans 30 secondes."
                 )
             except requests.exceptions.RequestException as e:
                 st.error(f"🔌 Erreur de connexion : {str(e)}")
 
-except FileNotFoundError:
-    st.error(
-        "⚠️ Fichier `sample_clients.csv` non trouvé. Placez-le dans ce même dossier."
-    )
 except Exception as e:
-    st.exception("Une erreur inattendue s’est produite :")
+    st.exception("Une erreur inattendue s'est produite :")
+    st.error(str(e))
+
+
+# 📝 Section de debug (à retirer en production)
+with st.expander("🔧 Informations de debug"):
+    st.write("**Répertoire de travail :**", os.getcwd())
+    st.write("**Fichiers dans le dossier :**", os.listdir("."))
+    st.write(
+        "**Chemin du script :**", __file__ if "__file__" in dir() else "Non disponible"
+    )

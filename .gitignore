@@ -29,11 +29,7 @@ data/raw/*.parquet
 # ========================
 # MLflow
 # ========================
-mlruns/
-mlflow_backend/
-mlflow.db
-mlruns/**
-mlflow_backend/**
+mlflow/**
 
 # Modèles sauvegardés localement (optionnel : tu peux les versionner via MLflow UI distant)
 models/
@@ -79,9 +75,7 @@ build/
 .pytest_cache/
 *.csv
 *.png
-src/mlflow_local_config.py
-src/notify.py
-src/tracking_local_utils.py
+src/**
 mlruns/
 data/
 *.csv

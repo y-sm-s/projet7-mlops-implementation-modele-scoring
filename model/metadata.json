@@ -1,7 +1,13 @@
 {
-  "optimal_threshold": 0.2950967703360949,
+  "optimal_threshold": 0.056373637999773504,
   "model_type": "LightGBM",
-  "training_samples": 452264,
-  "feature_count": 776,
-  "date": "2026-02-06 14:44:55"
+  "best_params": {
+    "learning_rate": "0.192",
+    "max_depth": "4",
+    "n_estimators": "349",
+    "num_leaves": "18"
+  },
+  "feature_count": 779,
+  "train_samples": 246000,
+  "date": "2026-03-01 00:23:07"
 }
