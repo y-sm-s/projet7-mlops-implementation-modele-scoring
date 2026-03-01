@@ -1,12 +1,13 @@
 fastapi==0.115.0
 uvicorn==0.32.0
-scikit-learn==1.5.2
+scikit-learn==1.6.1
 lightgbm==4.5.0
 pandas==2.2.3
-numpy==1.26.4
+numpy==2.0.2
 joblib==1.4.2
 python-multipart==0.0.9
 imbalanced-learn==0.10.1
+joblib==1.5.3
 fastapi
 uvicorn
 httpx
