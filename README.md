@@ -12,3 +12,6 @@ Prédire si un client remboursera son prêt.
 
 ## Environnement
 Utiliser `environment.yml` avec Conda.
+
+Test CI/CD
+
