@@ -1,5 +1,7 @@
+# api/model_loader.py
 from pathlib import Path
-import joblib, json
+import joblib
+import json
 
 # Dossier api/
 BASE_DIR = Path(__file__).resolve().parent
@@ -22,3 +24,6 @@ def load_artifacts():
         metadata = json.load(f)
 
     return model, features, metadata["optimal_threshold"]
+
+
+print("MODEL_PATH:", MODEL_PATH)
