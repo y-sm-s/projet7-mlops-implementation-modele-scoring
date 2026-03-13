@@ -1,13 +1,47 @@
 {
-  "optimal_threshold": 0.056373637999773504,
-  "model_type": "LightGBM",
-  "best_params": {
-    "learning_rate": "0.192",
-    "max_depth": "4",
-    "n_estimators": "349",
-    "num_leaves": "18"
+  "nom_modele": "LightGBM_v4_gridsearch_fin",
+  "date": "2026-03-13 03:43",
+  "algorithme": "LightGBM",
+  "smote_strategy": 0.3,
+  "seuil_optimal": 0.09594192247523198,
+  "hyperparametres": {
+    "learning_rate": 0.1,
+    "min_child_samples": 85,
+    "n_estimators": 400,
+    "num_leaves": 39,
+    "reg_alpha": 0.2,
+    "reg_lambda": 0.3
   },
-  "feature_count": 779,
-  "train_samples": 246000,
-  "date": "2026-03-01 00:23:07"
+  "subsample": 0.88,
+  "colsample_bytree": 0.64,
+  "auc_val": 0.7851193215870069,
+  "cout_metier": 30173,
+  "business_accuracy": 0.715844987521778,
+  "FN": 1802,
+  "FP": 12153,
+  "TP": 3163,
+  "TN": 44382,
+  "gain_vs_baseline_abs": 706,
+  "gain_vs_baseline_pct": 2.29,
+  "historique_versions": {
+    "baseline_s05": {
+      "cout": 48473,
+      "auc": 0.7771354714272571,
+      "seuil": 0.5
+    },
+    "baseline_sopt": {
+      "cout": 30879,
+      "seuil": 0.09769967964183705
+    },
+    "v3": {
+      "cout": 30449,
+      "auc": 0.7836441078528741,
+      "seuil": 0.07967199277569018
+    },
+    "v4": {
+      "cout": 30173,
+      "auc": 0.7851193215870069,
+      "seuil": 0.09594192247523198
+    }
+  }
 }
