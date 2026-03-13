@@ -4,6 +4,7 @@
   "algorithme": "LightGBM",
   "smote_strategy": 0.3,
   "seuil_optimal": 0.09594192247523198,
+  "optimal_threshold": 0.09594192247523198,
   "hyperparametres": {
     "learning_rate": 0.1,
     "min_child_samples": 85,
