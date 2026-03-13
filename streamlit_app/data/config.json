@@ -1,0 +1,7 @@
+{
+    "threshold":     0.09594192247523198,
+    "score_thresh":  904,
+    "model_version": "LightGBM_v4",
+    "auc_val":       0.785,
+    "date_trained":  "2026-02-28"
+}
