@@ -189,38 +189,75 @@ def load_clients() -> pd.DataFrame:
     return df
 
 
-@st.cache_data(show_spinner=False)
-def load_predictions() -> pd.DataFrame:
-    """Charge les scores pré-calculés (LightGBM local, instantané)."""
-    if PRED_PATH.exists():
-        return pd.read_csv(PRED_PATH)
-    return pd.DataFrame()
+def call_predict_api(features: dict) -> dict:
+    """Appelle l'API FastAPI avec les features du client.
+
+    - Nettoie les colonnes dérivées (AGE_YEARS, GENDER_LABEL…)
+    - Remplace NaN par 0
+    - Relance automatiquement si des features sont manquantes (code 400)
+    """
+    import re as _re
+
+    # Colonnes dérivées à exclure (pas des features modèle)
+    _DERIVED = {"AGE_YEARS", "EMPLOYMENT_YEARS", "GENDER_LABEL"}
+
+    clean = {}
+    for k, v in features.items():
+        if k in _DERIVED:
+            continue
+        try:
+            val = float(v)
+            clean[k] = 0.0 if (val != val) else val  # NaN → 0
+        except (TypeError, ValueError):
+            clean[k] = 0.0
+
+    # Retry : si l'API signale des features manquantes → on les ajoute à 0
+    for attempt in range(3):
+        try:
+            resp = requests.post(API_URL, json={"data": clean}, timeout=30)
+            if resp.status_code == 200:
+                r = resp.json()
+                prob   = float(r["probability"])
+                thresh = float(r.get("threshold", THRESHOLD))
+                dec    = int(r["decision"])
+                sc     = round((1 - prob) * 1000)
+                return {"probability": prob, "decision": dec,
+                        "score": sc, "threshold": thresh}
+            elif resp.status_code == 400:
+                detail  = resp.json().get("detail", "")
+                missing = _re.findall(r"'([^']+)'", detail)
+                for feat in missing:
+                    clean[feat] = 0.0
+            else:
+                return {"error": f"HTTP {resp.status_code}", "probability": None, "decision": None}
+        except requests.exceptions.Timeout:
+            return {"error": "timeout", "probability": None, "decision": None}
+        except Exception as e:
+            return {"error": str(e), "probability": None, "decision": None}
+
+    return {"error": "max_retries", "probability": None, "decision": None}
 
 
 def get_client_result(client_idx: int) -> dict:
-    """Retourne le résultat du modèle pour un client (depuis CSV pré-calculé)."""
-    preds = load_predictions()
-    if preds.empty or client_idx >= len(preds):
-        return {"error": "no_predictions", "probability": None, "decision": None}
-    row = preds.iloc[client_idx]
-    return {
-        "probability": float(row["probability"]),
-        "decision": int(row["decision"]),
-        "score": int(row["score"]),
-        "threshold": float(row["threshold"]),
-    }
+    """Appelle l'API pour un client chargé depuis sample_clients.csv."""
+    df = load_clients()
+    if df.empty or client_idx >= len(df):
+        return {"error": "client_introuvable", "probability": None, "decision": None}
+    row = df.iloc[client_idx].to_dict()
+    return call_predict_api(row)
 
 
 # ════════════════════════════════════════════════════════════════════════════
 # FONCTIONS UTILITAIRES
 # ════════════════════════════════════════════════════════════════════════════
-def interpret_risk(probability: float) -> tuple:
+def interpret_risk(probability: float, threshold: float = None) -> tuple:
     """Retourne (label_court, explication_html, couleur)."""
-    seuil_pct = THRESHOLD * 100
+    threshold = threshold if threshold is not None else THRESHOLD
+    seuil_pct = threshold * 100
     prob_pct = probability * 100
-    margin = abs(probability - THRESHOLD) * 100
+    margin = abs(probability - threshold) * 100
 
-    if probability < THRESHOLD * 0.5:
+    if probability < threshold * 0.5:
         return (
             "Risque très faible",
             (
@@ -230,7 +267,7 @@ def interpret_risk(probability: float) -> tuple:
             ),
             C_ACCEPTED,
         )
-    elif probability < THRESHOLD:
+    elif probability < threshold:
         return (
             "Risque faible",
             (
@@ -240,7 +277,7 @@ def interpret_risk(probability: float) -> tuple:
             ),
             C_ACCEPTED,
         )
-    elif probability < THRESHOLD * 1.5:
+    elif probability < threshold * 1.5:
         return (
             "Risque modéré",
             (
@@ -760,11 +797,12 @@ def make_bar_chart():
     return fig
 
 
-def make_client_gauge(probability: float) -> go.Figure:
+def make_client_gauge(probability: float, threshold: float = None) -> go.Figure:
     """Jauge de probabilité de défaut (WCAG : palette blue/vermillion, labels numériques)."""
-    is_accepted = probability < THRESHOLD
+    threshold = threshold if threshold is not None else THRESHOLD
+    is_accepted = probability < threshold
     bar_color = C_ACCEPTED if is_accepted else C_REFUSED
-    seuil_pct = round(THRESHOLD * 100, 1)
+    seuil_pct = round(threshold * 100, 1)
     prob_pct = round(probability * 100, 1)
 
     fig = go.Figure(
@@ -1213,19 +1251,21 @@ def show_client_analysis():
     decision = result.get("decision")
     api_error = result.get("error")
 
+    thresh = float(result.get("threshold") or THRESHOLD)
+
     if api_error or probability is None:
         # Repli sur heuristique locale (démo)
         ext2 = float(client_row.get("EXT_SOURCE_2") or 0.5)
         ext3 = float(client_row.get("EXT_SOURCE_3") or 0.5)
         probability = float(np.clip(0.35 - 0.25 * ext2 - 0.15 * ext3, 0.02, 0.98))
-        decision = 0 if probability < THRESHOLD else 1
+        decision = 0 if probability < thresh else 1
         st.info(
             f"ℹ️ API temporairement indisponible ({api_error}). Score estimé localement."
         )
 
     score = round((1 - probability) * 1000)
-    distance = probability - THRESHOLD
-    risk_lbl, risk_expl, risk_color = interpret_risk(probability)
+    distance = probability - thresh
+    risk_lbl, risk_expl, risk_color = interpret_risk(probability, thresh)
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 1 – Score & Décision
@@ -1238,7 +1278,7 @@ def show_client_analysis():
 
     with col_g:
         st.plotly_chart(
-            make_client_gauge(probability),
+            make_client_gauge(probability, thresh),
             use_container_width=True,
             config={"displayModeBar": False},
         )
@@ -1246,7 +1286,7 @@ def show_client_analysis():
         st.metric(
             "Score crédit",
             f"{score} / 1 000",
-            delta=f"{dist_sign}{distance * 100:.1f}% vs seuil ({THRESHOLD * 100:.1f}%)",
+            delta=f"{dist_sign}{distance * 100:.1f}% vs seuil ({thresh * 100:.1f}%)",
         )
 
     with col_d:
@@ -1275,7 +1315,7 @@ def show_client_analysis():
 
         # Barre de probabilité (HTML pur, accessible)
         prob_pct = probability * 100
-        seuil_pct = THRESHOLD * 100
+        seuil_pct = thresh * 100
         fill_clr = C_ACCEPTED if decision == 0 else C_REFUSED
         st.markdown(
             f"""
@@ -1647,27 +1687,20 @@ def show_prediction():
             if st.button(
                 "Calculer la Prédiction", use_container_width=True, disabled=not ready
             ):
-                ext2 = (
-                    0.6
-                    if credit_h in ["Excellent", "Bon"]
-                    else 0.35
-                    if credit_h == "Moyen"
-                    else 0.2
-                )
-                income_v = income or 45000
-                loan_v = loan or 25000
-                ratio = min((loan_v / income_v) / 3, 1.0)
-                emp_f = min((years_emp or 2) / 10, 1.0)
-                prob = float(
-                    np.clip(0.45 - 0.2 * ext2 - 0.1 * emp_f + 0.15 * ratio, 0.02, 0.97)
-                )
-                sc = round((1 - prob) * 1000)
-                dec = 0 if prob < THRESHOLD else 1
-                st.session_state.prediction_result = {
-                    "probability": prob,
-                    "decision": dec,
-                    "score": sc,
+                _ext2_map = {"Excellent": 0.82, "Bon": 0.65, "Moyen": 0.40, "Faible": 0.18}
+                features = {
+                    "DAYS_BIRTH":     -((age or 35) * 365),
+                    "DAYS_EMPLOYED":  -((years_emp or 1) * 365) if (years_emp or 0) > 0 else 365243,
+                    "AMT_INCOME_TOTAL": float(income or 45000),
+                    "AMT_CREDIT":       float(loan or 25000),
+                    "AMT_ANNUITY":      float(debt or 0),
+                    "CNT_CHILDREN":     float(children or 0),
+                    "EXT_SOURCE_2":     _ext2_map.get(credit_h, 0.5),
+                    "FLAG_OWN_REALTY":  1.0 if prop == "Propriétaire" else 0.0,
                 }
+                with st.spinner("Analyse en cours…"):
+                    result = call_predict_api(features)
+                st.session_state.prediction_result = result
                 st.session_state.pred_loaded_sk_id = None  # clear loaded client badge
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1690,10 +1723,11 @@ def show_prediction():
                 unsafe_allow_html=True,
             )
         else:
-            prob = res["probability"]
-            sc = res["score"]
-            dec = res["decision"]
-            rl, re, rc = interpret_risk(prob)
+            prob   = res["probability"]
+            sc     = res["score"]
+            dec    = res["decision"]
+            thresh = float(res.get("threshold") or THRESHOLD)
+            rl, re, rc = interpret_risk(prob, thresh)
 
             st.plotly_chart(
                 make_score_gauge(sc),
@@ -1724,7 +1758,7 @@ def show_prediction():
             st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
             m1, m2 = st.columns(2)
             m1.metric("Score crédit", f"{sc} / 1 000")
-            dist = prob - THRESHOLD
+            dist = prob - thresh
             m2.metric("Écart vs seuil", f"{'+' if dist > 0 else ''}{dist * 100:.1f}%")
 
         st.markdown("</div>", unsafe_allow_html=True)
