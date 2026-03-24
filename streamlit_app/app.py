@@ -85,6 +85,12 @@ C_BG = "#f9fafb"
 C_WHITE = "#ffffff"
 C_BORDER = "#e5e7eb"
 
+# ── Couleurs graphiques de comparaison (vert/rouge + formes pour WCAG) ────────
+# WCAG 1.4.1 : couleur TOUJOURS couplée à une forme ou un label textuel
+C_GREEN = "#1A7F3C"   # Vert foncé → Accordé  (contraste 5.1:1 sur blanc)
+C_RED   = "#C0392B"   # Rouge foncé → Refusé  (contraste 5.5:1 sur blanc)
+C_CLIENT = "#F97316"  # Orange vif  → Marqueur client (visible sur vert ET rouge)
+
 # ── Variables comparaison (sous-ensemble lisible) ─────────────────────────────
 COMPARE_FEATURES = {
     "AGE_YEARS": "Âge (années)",
@@ -186,6 +192,11 @@ def load_clients() -> pd.DataFrame:
         df["GENDER_LABEL"] = (
             df["CODE_GENDER"].map({1: "Homme", 0: "Femme"}).fillna("N/R")
         )
+    # Fusion avec les prédictions pour récupérer la décision (accordé/refusé)
+    if PRED_PATH.exists() and "SK_ID_CURR" in df.columns:
+        pred = pd.read_csv(PRED_PATH)[["SK_ID_CURR", "decision", "probability"]]
+        pred = pred.rename(columns={"decision": "DECISION", "probability": "PRED_PROBA"})
+        df = df.merge(pred, on="SK_ID_CURR", how="left")
     return df
 
 
@@ -875,29 +886,51 @@ def make_comparison_chart(
     feature_label: str = "",
 ) -> go.Figure:
     """
-    Histogramme WCAG : population (bleu) + marqueur client (vermillon).
-    WCAG 1.4.1 : couleur + forme + texte (jamais couleur seule).
+    Histogramme WCAG : vert = accordés, rouge = refusés, orange = ce client.
+    WCAG 1.4.1 : couleur + label textuel (jamais couleur seule).
     WCAG 1.4.3 : contraste texte >= 4.5:1.
     """
+    if feature not in df.columns:
+        return go.Figure()
     vals = df[feature].dropna()
     if len(vals) == 0:
         return go.Figure()
     percentile = (vals < client_value).mean() * 100
 
     fig = go.Figure()
+    has_decision = "DECISION" in df.columns
 
-    # Population – histogramme bleu (couleur + label)
-    fig.add_trace(
-        go.Histogram(
+    if has_decision:
+        # Barres vertes pour les clients accordés
+        acc_vals = df.loc[df["DECISION"] == 0, feature].dropna()
+        ref_vals = df.loc[df["DECISION"] == 1, feature].dropna()
+        if len(acc_vals) > 0:
+            fig.add_trace(go.Histogram(
+                x=acc_vals,
+                nbinsx=30,
+                name="Accordé ✅",
+                marker=dict(color=C_GREEN, opacity=0.70, line=dict(color="white", width=0.5)),
+                hovertemplate="Valeur: %{x}<br>Clients accordés: %{y}<extra></extra>",
+            ))
+        # Barres rouges pour les clients refusés
+        if len(ref_vals) > 0:
+            fig.add_trace(go.Histogram(
+                x=ref_vals,
+                nbinsx=30,
+                name="Refusé ❌",
+                marker=dict(color=C_RED, opacity=0.70, line=dict(color="white", width=0.5)),
+                hovertemplate="Valeur: %{x}<br>Clients refusés: %{y}<extra></extra>",
+            ))
+        fig.update_layout(barmode="overlay")
+    else:
+        # Fallback monochrome si pas de colonne DECISION
+        fig.add_trace(go.Histogram(
             x=vals,
             nbinsx=35,
             name=f"Population ({group_label})",
-            marker=dict(
-                color=C_ACCEPTED, opacity=0.60, line=dict(color="white", width=0.5)
-            ),
-            hovertemplate=f"Valeur: %{{x}}<br>Nombre de clients: %{{y}}<extra></extra>",
-        )
-    )
+            marker=dict(color=C_ACCEPTED, opacity=0.60, line=dict(color="white", width=0.5)),
+            hovertemplate="Valeur: %{x}<br>Nombre de clients: %{y}<extra></extra>",
+        ))
 
     # Médiane – ligne pointillée grise
     median_val = vals.median()
@@ -913,10 +946,10 @@ def make_comparison_chart(
         annotation_position="bottom right",
     )
 
-    # Client – ligne vermillon pleine + annotation texte détaillée
+    # Client – ligne orange vif + annotation texte détaillée
     fig.add_vline(
         x=client_value,
-        line_color=C_REFUSED,
+        line_color=C_CLIENT,
         line_width=3,
         line_dash="solid",
         annotation=dict(
@@ -926,10 +959,10 @@ def make_comparison_chart(
                 f"Percentile {percentile:.0f}e"
             ),
             bgcolor="white",
-            bordercolor=C_REFUSED,
+            bordercolor=C_CLIENT,
             borderwidth=2,
             borderpad=6,
-            font=dict(size=12, color=C_REFUSED),
+            font=dict(size=12, color=C_CLIENT),
             yanchor="bottom",
         ),
         annotation_position="top",
@@ -953,6 +986,104 @@ def make_comparison_chart(
             "x": 1,
         },
         margin={"t": 55, "b": 40, "l": 40, "r": 20},
+    )
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor="#f3f4f6")
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor="#f3f4f6")
+    return fig
+
+
+def make_scatter_chart(
+    df: pd.DataFrame,
+    feat_x: str,
+    feat_y: str,
+    client_x: float,
+    client_y: float,
+    label_x: str = "",
+    label_y: str = "",
+) -> go.Figure:
+    """
+    Nuage de points WCAG : vert (cercle) = accordés, rouge (carré) = refusés,
+    étoile orange = ce client.
+    WCAG 1.4.1 : couleur + forme géométrique distincte pour chaque groupe.
+    """
+    if feat_x not in df.columns or feat_y not in df.columns:
+        return go.Figure()
+
+    lbl_x = label_x or feat_x
+    lbl_y = label_y or feat_y
+    has_decision = "DECISION" in df.columns
+
+    fig = go.Figure()
+
+    if has_decision:
+        df_acc = df[(df["DECISION"] == 0) & df[feat_x].notna() & df[feat_y].notna()]
+        df_ref = df[(df["DECISION"] == 1) & df[feat_x].notna() & df[feat_y].notna()]
+
+        # Cercles verts – accordés
+        fig.add_trace(go.Scatter(
+            x=df_acc[feat_x],
+            y=df_acc[feat_y],
+            mode="markers",
+            name="Accordé ✅",
+            marker=dict(
+                color=C_GREEN, symbol="circle", size=7,
+                opacity=0.55, line=dict(width=0),
+            ),
+            hovertemplate=f"{lbl_x}: %{{x}}<br>{lbl_y}: %{{y}}<extra>Accordé</extra>",
+        ))
+        # Carrés rouges – refusés
+        fig.add_trace(go.Scatter(
+            x=df_ref[feat_x],
+            y=df_ref[feat_y],
+            mode="markers",
+            name="Refusé ❌",
+            marker=dict(
+                color=C_RED, symbol="square", size=7,
+                opacity=0.55, line=dict(width=0),
+            ),
+            hovertemplate=f"{lbl_x}: %{{x}}<br>{lbl_y}: %{{y}}<extra>Refusé</extra>",
+        ))
+    else:
+        dfv = df[df[feat_x].notna() & df[feat_y].notna()]
+        fig.add_trace(go.Scatter(
+            x=dfv[feat_x], y=dfv[feat_y],
+            mode="markers", name="Population",
+            marker=dict(color=C_ACCEPTED, size=6, opacity=0.55),
+            hovertemplate=f"{lbl_x}: %{{x}}<br>{lbl_y}: %{{y}}<extra></extra>",
+        ))
+
+    # Étoile orange – ce client
+    fig.add_trace(go.Scatter(
+        x=[client_x],
+        y=[client_y],
+        mode="markers+text",
+        name="Ce client 📍",
+        marker=dict(
+            color=C_CLIENT, symbol="star", size=20,
+            line=dict(color="white", width=1.5),
+        ),
+        text=["📍 Ce client"],
+        textposition="top center",
+        textfont=dict(size=12, color=C_CLIENT),
+        hovertemplate=f"<b>Ce client</b><br>{lbl_x}: %{{x}}<br>{lbl_y}: %{{y}}<extra></extra>",
+    ))
+
+    fig.update_layout(
+        title={"text": f"{lbl_x} vs {lbl_y}", "font": {"size": 15, "color": C_DARK}},
+        xaxis_title=lbl_x,
+        yaxis_title=lbl_y,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font={"family": "Inter", "size": 13},
+        showlegend=True,
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "right",
+            "x": 1,
+        },
+        margin={"t": 55, "b": 40, "l": 50, "r": 20},
     )
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor="#f3f4f6")
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor="#f3f4f6")
@@ -1413,30 +1544,50 @@ def show_client_analysis():
         unsafe_allow_html=True,
     )
 
-    cf_col, cg_col = st.columns(2)
+    # ── Contrôles de la comparaison ──────────────────────────────────────────
+    ct_col, cf_col, cg_col = st.columns([1.2, 2, 2])
+    with ct_col:
+        chart_type = st.selectbox(
+            "Type de graphique",
+            ["Histogramme", "Nuage de points"],
+            key="compare_chart_type",
+        )
     with cf_col:
         compare_feat = st.selectbox(
-            "Variable à comparer",
+            "Variable à comparer" if chart_type == "Histogramme" else "Variable axe X",
             list(COMPARE_FEATURES.keys()),
             format_func=lambda k: COMPARE_FEATURES[k],
             key="compare_feature",
         )
     with cg_col:
-        GROUP_OPTIONS = {
-            "Tous les clients": None,
-            "Même tranche d'âge (± 10 ans)": "age",
-            "Même tranche de revenu (± 50 %)": "income",
-        }
-        grp_lbl = st.selectbox(
-            "Groupe de comparaison", list(GROUP_OPTIONS.keys()), key="compare_group"
-        )
+        if chart_type == "Histogramme":
+            GROUP_OPTIONS = {
+                "Tous les clients": None,
+                "Même tranche d'âge (± 10 ans)": "age",
+                "Même tranche de revenu (± 50 %)": "income",
+            }
+            grp_lbl = st.selectbox(
+                "Groupe de comparaison", list(GROUP_OPTIONS.keys()), key="compare_group"
+            )
+        else:
+            # Deuxième variable pour le scatter
+            feat_y_options = {k: v for k, v in COMPARE_FEATURES.items() if k != compare_feat}
+            compare_feat_y = st.selectbox(
+                "Variable axe Y",
+                list(feat_y_options.keys()),
+                format_func=lambda k: COMPARE_FEATURES[k],
+                key="compare_feature_y",
+                index=1,
+            )
+            grp_lbl = "Tous les clients"
+            GROUP_OPTIONS = {"Tous les clients": None}
 
-    # Filtrage
+    # Filtrage du groupe de comparaison
     fdf = df.copy()
-    if GROUP_OPTIONS[grp_lbl] == "age" and "AGE_YEARS" in df.columns:
+    if GROUP_OPTIONS.get(grp_lbl) == "age" and "AGE_YEARS" in df.columns:
         age_v = float(client_row.get("AGE_YEARS") or 40)
         fdf = df[abs(df["AGE_YEARS"] - age_v) <= 10]
-    elif GROUP_OPTIONS[grp_lbl] == "income" and "AMT_INCOME_TOTAL" in df.columns:
+    elif GROUP_OPTIONS.get(grp_lbl) == "income" and "AMT_INCOME_TOTAL" in df.columns:
         inc_v = float(client_row.get("AMT_INCOME_TOTAL") or 50000)
         fdf = df[
             (df["AMT_INCOME_TOTAL"] >= inc_v * 0.5)
@@ -1444,46 +1595,88 @@ def show_client_analysis():
         ]
 
     client_feat_val = client_row.get(compare_feat)
-    if (
+    feat_val_ok = (
         client_feat_val is not None
         and not (isinstance(client_feat_val, float) and np.isnan(client_feat_val))
         and compare_feat in fdf.columns
-    ):
-        cfv = float(client_feat_val)
-        fig_cmp = make_comparison_chart(
-            fdf,
-            compare_feat,
-            cfv,
-            group_label=grp_lbl,
-            feature_label=COMPARE_FEATURES[compare_feat],
-        )
-        st.plotly_chart(
-            fig_cmp, use_container_width=True, config={"displayModeBar": False}
-        )
+    )
 
-        # Description textuelle accessible (WCAG 1.1.1 Non-text Content)
-        vals = fdf[compare_feat].dropna()
-        percentile = (vals < cfv).mean() * 100
-        median_val = vals.median()
-        position = "supérieure" if cfv > median_val else "inférieure ou égale"
-        st.markdown(
-            f"""
-        <div role="note" aria-label="Description textuelle du graphique"
-             style="background:#f8fafc;border-left:4px solid {C_PRIMARY};border-radius:0 8px 8px 0;
-                    padding:12px 16px;font-size:14px;color:#374151;margin-top:4px;">
-            <strong>📖 Description accessible :</strong>
-            Ce client se situe au <strong>{percentile:.0f}e percentile</strong>
-            pour «&nbsp;{COMPARE_FEATURES[compare_feat]}&nbsp;»
-            dans le groupe «&nbsp;{grp_lbl}&nbsp;» (N&nbsp;=&nbsp;{len(vals):,} clients).
-            Sa valeur ({format_value(compare_feat, cfv)}) est {position}
-            à la médiane du groupe ({format_value(compare_feat, median_val)}).
-            La ligne <span style="color:{C_REFUSED};font-weight:600;">vermillon</span> indique
-            la position du client,
-            la ligne <span style="color:{C_NEUTRAL};font-weight:600;">grise pointillée</span>
-            indique la médiane.
-        </div>""",
-            unsafe_allow_html=True,
-        )
+    if feat_val_ok:
+        cfv = float(client_feat_val)
+
+        if chart_type == "Histogramme":
+            fig_cmp = make_comparison_chart(
+                fdf,
+                compare_feat,
+                cfv,
+                group_label=grp_lbl,
+                feature_label=COMPARE_FEATURES[compare_feat],
+            )
+            st.plotly_chart(fig_cmp, use_container_width=True, config={"displayModeBar": False})
+
+            # Description textuelle accessible (WCAG 1.1.1)
+            vals = fdf[compare_feat].dropna()
+            percentile = (vals < cfv).mean() * 100
+            median_val = vals.median()
+            position = "supérieure" if cfv > median_val else "inférieure ou égale"
+            has_dec = "DECISION" in fdf.columns
+            n_acc = int((fdf["DECISION"] == 0).sum()) if has_dec else "–"
+            n_ref = int((fdf["DECISION"] == 1).sum()) if has_dec else "–"
+            st.markdown(
+                f"""
+            <div role="note" aria-label="Description textuelle du graphique"
+                 style="background:#f8fafc;border-left:4px solid {C_PRIMARY};border-radius:0 8px 8px 0;
+                        padding:12px 16px;font-size:14px;color:#374151;margin-top:4px;">
+                <strong>📖 Description accessible :</strong>
+                Ce client se situe au <strong>{percentile:.0f}e percentile</strong>
+                pour «&nbsp;{COMPARE_FEATURES[compare_feat]}&nbsp;»
+                dans le groupe «&nbsp;{grp_lbl}&nbsp;» (N&nbsp;=&nbsp;{len(vals):,} clients).
+                Sa valeur ({format_value(compare_feat, cfv)}) est {position}
+                à la médiane du groupe ({format_value(compare_feat, median_val)}).
+                <span style="color:{C_GREEN};font-weight:600;">Barres vertes</span> = accordés ({n_acc}) ·
+                <span style="color:{C_RED};font-weight:600;">Barres rouges</span> = refusés ({n_ref}) ·
+                <span style="color:{C_CLIENT};font-weight:600;">Ligne orange</span> = ce client.
+            </div>""",
+                unsafe_allow_html=True,
+            )
+
+        else:  # Nuage de points
+            client_y_val = client_row.get(compare_feat_y)
+            if (
+                client_y_val is not None
+                and not (isinstance(client_y_val, float) and np.isnan(client_y_val))
+                and compare_feat_y in fdf.columns
+            ):
+                fig_sc = make_scatter_chart(
+                    fdf,
+                    feat_x=compare_feat,
+                    feat_y=compare_feat_y,
+                    client_x=cfv,
+                    client_y=float(client_y_val),
+                    label_x=COMPARE_FEATURES[compare_feat],
+                    label_y=COMPARE_FEATURES[compare_feat_y],
+                )
+                st.plotly_chart(fig_sc, use_container_width=True, config={"displayModeBar": False})
+
+                # Description accessible scatter
+                st.markdown(
+                    f"""
+                <div role="note" aria-label="Description textuelle du graphique"
+                     style="background:#f8fafc;border-left:4px solid {C_PRIMARY};border-radius:0 8px 8px 0;
+                            padding:12px 16px;font-size:14px;color:#374151;margin-top:4px;">
+                    <strong>📖 Description accessible :</strong>
+                    Nuage de points «&nbsp;{COMPARE_FEATURES[compare_feat]}&nbsp;» (axe X)
+                    vs «&nbsp;{COMPARE_FEATURES[compare_feat_y]}&nbsp;» (axe Y)
+                    sur {len(fdf):,} clients.
+                    <span style="color:{C_GREEN};font-weight:600;">Cercles verts</span> = accordés ·
+                    <span style="color:{C_RED};font-weight:600;">Carrés rouges</span> = refusés ·
+                    <span style="color:{C_CLIENT};font-weight:600;">Étoile orange</span> = ce client
+                    ({format_value(compare_feat, cfv)} ; {format_value(compare_feat_y, float(client_y_val))}).
+                </div>""",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.info("Données non disponibles pour la variable Y sélectionnée.")
     else:
         st.info("Données non disponibles pour cette variable / ce groupe.")
 

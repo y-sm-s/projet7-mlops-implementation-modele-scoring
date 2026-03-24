@@ -1,0 +1,23 @@
+name: Deploy Dashboard - CreditAI Streamlit
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'streamlit_app/**'   # Se déclenche uniquement si streamlit_app/ est modifié
+
+jobs:
+  deploy-dashboard:
+    name: Deploy Dashboard to Render
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Deploy Dashboard to Render
+      run: |
+        curl -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_DASHBOARD_SERVICE_ID }}/deploys" \
+          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+          -H "Content-Type: application/json" \
+          --fail-with-body
